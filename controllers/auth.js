@@ -3,6 +3,7 @@ const {
   createRefreshToken,
   verifyRefreshToken,
 } = require("../services/auth");
+const UserModel = require("../models/users");
 
 const refreshCookieOptions = {
   httpOnly: true,
@@ -24,19 +25,40 @@ function getCookie(req, name) {
 }
 
 async function handleUserLogin(req, res) {
-  const { email, password } = req.body;
+  try {
+    const email = req.body.email?.trim().toLowerCase();
+    const { password } = req.body;
 
-  // Replace this demo user with your database/password validation.
-  if (!email || !password) {
-    return res.status(400).json({ message: "Email and password are required" });
+    if (!email || !password) {
+      return res
+        .status(400)
+        .json({ message: "Email and password are required" });
+    }
+
+    const existingUser = await UserModel.findOne({ email });
+    const isValidPassword =
+      existingUser && (await existingUser.verifyPassword(password));
+
+    if (!isValidPassword) {
+      return res.status(401).json({ message: "Invalid email or password" });
+    }
+
+    const user = {
+      _id: existingUser._id,
+      fullName: existingUser.fullName,
+      email: existingUser.email,
+      profileImage: existingUser.profileImage,
+      createdAt: existingUser.createdAt,
+    };
+    const accessToken = createAccessToken(existingUser);
+    const refreshToken = createRefreshToken(existingUser);
+
+    res.cookie("refreshToken", refreshToken, refreshCookieOptions);
+    return res.status(200).json({ accessToken, user });
+  } catch (error) {
+    console.error("Unable to log in user:", error);
+    return res.status(500).json({ message: "Unable to log in" });
   }
-
-  const user = { _id: 36254, email };
-  const accessToken = createAccessToken(user);
-  const refreshToken = createRefreshToken(user);
-
-  res.cookie("refreshToken", refreshToken, refreshCookieOptions);
-  return res.json({ accessToken, user });
 }
 
 function handleTokenRefresh(req, res) {
@@ -48,12 +70,14 @@ function handleTokenRefresh(req, res) {
 
   try {
     const payload = verifyRefreshToken(refreshToken);
-    const user = { _id: payload._id, email: payload.email };
+    console.log("payload", payload);
 
-    return res.json({ accessToken: createAccessToken(user), user });
+    return res.json({ accessToken: createAccessToken(payload), user: payload });
   } catch {
     res.clearCookie("refreshToken", refreshCookieOptions);
-    return res.status(401).json({ message: "Refresh token is invalid or expired" });
+    return res
+      .status(401)
+      .json({ message: "Refresh token is invalid or expired" });
   }
 }
 
@@ -62,4 +86,39 @@ function handleUserLogout(req, res) {
   return res.status(204).send();
 }
 
-module.exports = { handleUserLogin, handleTokenRefresh, handleUserLogout };
+async function handleUserSignup(req, res) {
+  try {
+    const fullName = req.body.fullName?.trim();
+    const email = req.body.email?.trim().toLowerCase();
+    const { password } = req.body;
+
+    if (!fullName || !email || !password) {
+      return res
+        .status(400)
+        .json({ message: "Full name, email, and password are required" });
+    }
+
+    const existingUser = await UserModel.exists({ email });
+    if (existingUser) {
+      return res.status(409).json({ message: "Email is already registered" });
+    }
+
+    await UserModel.create({ fullName, email, password });
+
+    return res.status(201).json({ message: "User created successfully" });
+  } catch (error) {
+    if (error?.code === 11000) {
+      return res.status(409).json({ message: "Email is already registered" });
+    }
+
+    console.error("Unable to create user:", error);
+    return res.status(500).json({ message: "Unable to create user" });
+  }
+}
+
+module.exports = {
+  handleUserLogin,
+  handleTokenRefresh,
+  handleUserLogout,
+  handleUserSignup,
+};

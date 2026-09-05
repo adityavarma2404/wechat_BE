@@ -4,6 +4,7 @@ const express = require("express");
 const cors = require("cors");
 const authRoutes = require("./routes/auth");
 const userRoutes = require("./routes/users");
+const conversationRoutes = require("./routes/conversations");
 const mongoose = require("mongoose");
 
 const app = express();
@@ -19,6 +20,7 @@ app.use(express.urlencoded({ extended: true }));
 
 app.use("/api", authRoutes);
 app.use("/api", userRoutes);
+app.use("/api", conversationRoutes);
 
 async function startServer() {
   try {

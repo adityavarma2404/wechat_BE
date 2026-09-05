@@ -1,4 +1,5 @@
 const UserModel = require("../models/users");
+const CoversationMemberModel = require("../models/conversationMember");
 
 async function handleUserSearch(req, res) {
   try {
@@ -24,4 +25,13 @@ async function handleUserSearch(req, res) {
   }
 }
 
-module.exports = { handleUserSearch };
+async function handleUserConversations(req, res) {
+  try {
+    const userId = req.user._id;
+    const conversations = await CoversationMemberModel.find({
+      userId: userId,
+    }).populate("conversationId");
+  } catch (error) {}
+}
+
+module.exports = { handleUserSearch, handleUserConversations };
